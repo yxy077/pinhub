@@ -2,6 +2,9 @@
   'use strict';
 
   var user = null;
+  var apiOrigin = window.PINHUB_API_ORIGIN || '';
+  var sessionKey = 'pinhub.session';
+  var sessionToken = apiOrigin ? readSession() : '';
   var orders = [];
   var loaded = false;
   var offline = false;
@@ -34,11 +37,33 @@
     return element;
   }
 
+  function readSession() {
+    try {
+      return window.sessionStorage.getItem(sessionKey) || '';
+    } catch (error) {
+      return '';
+    }
+  }
+
+  function saveSession(token) {
+    if (!apiOrigin) return;
+    sessionToken = token || '';
+    try {
+      if (sessionToken) window.sessionStorage.setItem(sessionKey, sessionToken);
+      else window.sessionStorage.removeItem(sessionKey);
+    } catch (error) {
+      // The current page can still use the session if browser storage is disabled.
+    }
+  }
+
   function api(method, path, data, done) {
     var xhr = new XMLHttpRequest();
-    xhr.open(method, path, true);
+    xhr.open(method, apiOrigin + path, true);
     xhr.timeout = 8000;
     if (method === 'POST') xhr.setRequestHeader('Content-Type', 'application/json');
+    if (sessionToken && (method !== 'GET' || path !== '/api/orders')) {
+      xhr.setRequestHeader('Authorization', 'Bearer ' + sessionToken);
+    }
     xhr.onload = function () {
       var result;
       try {
@@ -308,6 +333,7 @@
 
   function setUser(value) {
     user = value;
+    if (!user) saveSession('');
     byId('account-name').textContent = user ? user.nickname : '';
     byId('account-name').hidden = !user;
     byId('login').hidden = !!user;
@@ -432,6 +458,7 @@
         return;
       }
       var next = pendingAction;
+      saveSession(data.token);
       setUser(data.user);
       closeModal();
       notify(register ? '注册成功' : '已登录');
