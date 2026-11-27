@@ -29,7 +29,7 @@ jobs:
       - name: Build the PinHub frontend
         run: node build-pages.mjs
         env:
-          PINHUB_API_ORIGIN: https://pinhub.y27866652.workers.dev
+          PINHUB_API_ORIGIN: https://pinhub.yxy.qzz.io
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist/pages
