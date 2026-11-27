@@ -5,6 +5,7 @@ const platforms = ['美团', '饿了么', '拼多多', '淘宝', '其他'];
 
 function starterData() {
   const now = Date.now();
+  /** @type {Array<[string, string, string, number, number, number, string, string, number]>} */
   const examples = [
     ['黑糖波波奶茶', '奶茶', '美团', 6800, 4, 2, '晚风同学', '下课后一起点，默认少冰。', 5],
     ['丹东草莓分享盒', '水果', '拼多多', 5600, 5, 3, '橘子汽水', '两斤装，到货后按份分。', 19],
