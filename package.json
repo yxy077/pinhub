@@ -1,0 +1,13 @@
+{
+  "name": "pinhub",
+  "version": "1.0.0",
+  "private": true,
+  "description": "宿舍拼单演示系统",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "build:worker": "node build-worker.mjs"
+  }
+}
