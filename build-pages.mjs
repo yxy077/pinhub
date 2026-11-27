@@ -1,4 +1,5 @@
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 
 const endpoint = new URL(process.env.PINHUB_API_ORIGIN || '');
 if (endpoint.protocol !== 'https:' || endpoint.href !== endpoint.origin + '/') {
@@ -6,6 +7,8 @@ if (endpoint.protocol !== 'https:' || endpoint.href !== endpoint.origin + '/') {
 }
 const source = new URL('./public/', import.meta.url);
 const output = new URL('./dist/pages/', import.meta.url);
+const endpointVersion = createHash('sha256').update(endpoint.origin).digest('hex').slice(0, 12);
+const configName = `pinhub-config-${endpointVersion}.js`;
 await mkdir(output, { recursive: true });
 
 const html = (await readFile(new URL('index.html', source), 'utf8'))
@@ -13,14 +16,14 @@ const html = (await readFile(new URL('index.html', source), 'utf8'))
   <title>`)
   .replace('href="/style.css"', 'href="./style.css"')
   .replace('<script defer src="/app.js"></script>',
-    '<script defer src="./pinhub-config.js"></script>\n  <script defer src="./app.js"></script>')
+    `<script defer src="./${configName}"></script>\n  <script defer src="./app.js"></script>`)
   .replace('class="brand" href="/"', 'class="brand" href="./"');
 const css = (await readFile(new URL('style.css', source), 'utf8')).replace('url("/food.jpg")', 'url("./food.jpg")');
 
 await Promise.all([
   writeFile(new URL('index.html', output), html),
   writeFile(new URL('style.css', output), css),
-  writeFile(new URL('pinhub-config.js', output), `window.PINHUB_API_ORIGIN = ${JSON.stringify(endpoint.origin)};\n`),
+  writeFile(new URL(configName, output), `window.PINHUB_API_ORIGIN = ${JSON.stringify(endpoint.origin)};\n`),
   copyFile(new URL('app.js', source), new URL('app.js', output)),
   copyFile(new URL('food.jpg', source), new URL('food.jpg', output))
 ]);
