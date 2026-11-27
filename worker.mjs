@@ -77,7 +77,8 @@ function cookie(value, maxAge) {
 }
 
 async function getSession(request, db) {
-  const match = /(?:^|;\s*)pinhub_session=([a-f0-9]{64})(?:;|$)/.exec(request.headers.get('Cookie') || '');
+  const match = /^Bearer ([a-f0-9]{64})$/.exec(request.headers.get('Authorization') || '') ||
+    /(?:^|;\s*)pinhub_session=([a-f0-9]{64})(?:;|$)/.exec(request.headers.get('Cookie') || '');
   if (!match) return null;
   const tokenHash = await hashToken(match[1]);
   return db.prepare(`SELECT users.id, users.nickname, sessions.token_hash FROM sessions
@@ -85,7 +86,13 @@ async function getSession(request, db) {
     .bind(tokenHash, Date.now()).first();
 }
 
-async function register(db, body) {
+function signedIn(status, user, token, crossOrigin) {
+  return crossOrigin
+    ? json(status, { user: publicUser(user), token })
+    : json(status, { user: publicUser(user) }, { 'Set-Cookie': cookie(token, sessionSeconds) });
+}
+
+async function register(db, body, crossOrigin) {
   const username = accountName(body.username);
   const password = passwordValue(body.password);
   const nickname = stringField(body.nickname, 1, 16, '昵称需为 1–16 个字符。');
@@ -102,10 +109,10 @@ async function register(db, body) {
       SELECT ?, id, ? FROM users WHERE id = ?`).bind(tokenHash, now + sessionSeconds * 1000, user.id)
   ]);
   if (results[0].meta.changes !== 1) throw failure(409, '这个账号已经被使用。');
-  return json(201, { user: publicUser(user) }, { 'Set-Cookie': cookie(token, sessionSeconds) });
+  return signedIn(201, user, token, crossOrigin);
 }
 
-async function login(db, body) {
+async function login(db, body, crossOrigin) {
   const username = accountName(body.username);
   const password = passwordValue(body.password);
   const user = await db.prepare('SELECT id, nickname, salt, hash FROM users WHERE username = ?').bind(username).first();
@@ -118,7 +125,7 @@ async function login(db, body) {
     db.prepare('INSERT INTO sessions(token_hash, user_id, expires_at) VALUES (?, ?, ?)')
       .bind(await hashToken(token), user.id, now + sessionSeconds * 1000)
   ]);
-  return json(200, { user: publicUser(user) }, { 'Set-Cookie': cookie(token, sessionSeconds) });
+  return signedIn(200, user, token, crossOrigin);
 }
 
 function insertOrder(db, order) {
@@ -162,49 +169,72 @@ async function changeMembership(db, id, user, join) {
   throw failure(409, '拼单状态已变化，请刷新后再试。');
 }
 
+async function handleRequest(request, env, crossOrigin) {
+  try {
+    const { pathname } = new URL(request.url);
+    const method = request.method;
+    if ((method === 'GET' || method === 'HEAD') && Object.hasOwn(assets, pathname)) {
+      const [type, encoded] = assets[pathname];
+      return new Response(method === 'HEAD' ? null : Uint8Array.from(atob(encoded), character => character.charCodeAt(0)), {
+        headers: { ...securityHeaders, 'Content-Type': type, 'Cache-Control': 'no-cache' }
+      });
+    }
+    const db = env.DB;
+    if (method === 'GET' && pathname === '/api/orders') {
+      return json(200, { orders: await listOrders(db), now: Date.now() });
+    }
+    if (method === 'GET' && pathname === '/api/me') {
+      const user = await getSession(request, db);
+      return json(200, { user: user ? publicUser(user) : null });
+    }
+    if (method !== 'POST') throw failure(404, '页面不存在。');
+    if (!crossOrigin && request.headers.get('Sec-Fetch-Site') === 'cross-site') throw failure(403, '请在拼单页面内重试。');
+    const body = await readBody(request);
+    if (pathname === '/api/register') return await register(db, body, crossOrigin);
+    if (pathname === '/api/login') return await login(db, body, crossOrigin);
+    const user = await getSession(request, db);
+    if (pathname === '/api/logout') {
+      if (user) await db.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(user.token_hash).run();
+      return json(200, {}, crossOrigin ? {} : { 'Set-Cookie': cookie('', 0) });
+    }
+    if (!['/api/orders', '/api/orders/join', '/api/orders/cancel'].includes(pathname)) {
+      throw failure(404, '接口不存在。');
+    }
+    if (!user) throw failure(401, '请先登录。');
+    if (pathname === '/api/orders') {
+      const order = orderFromBody(body, user, crypto.randomUUID());
+      await insertOrder(db, order).run();
+      return json(201, { order: publicOrder(order) });
+    }
+    const order = await changeMembership(db, body.id, user, pathname === '/api/orders/join');
+    return json(200, { order });
+  } catch (error) {
+    if (!error.status) console.error(error);
+    return json(error.status || 500, { error: error.status ? error.message : '服务器暂时无法处理请求。' });
+  }
+}
+
 export default {
   async fetch(request, env) {
-    try {
-      const { pathname } = new URL(request.url);
-      const method = request.method;
-      if ((method === 'GET' || method === 'HEAD') && Object.hasOwn(assets, pathname)) {
-        const [type, encoded] = assets[pathname];
-        return new Response(method === 'HEAD' ? null : Uint8Array.from(atob(encoded), character => character.charCodeAt(0)), {
-          headers: { ...securityHeaders, 'Content-Type': type, 'Cache-Control': 'no-cache' }
-        });
-      }
-      const db = env.DB;
-      if (method === 'GET' && pathname === '/api/orders') {
-        return json(200, { orders: await listOrders(db), now: Date.now() });
-      }
-      if (method === 'GET' && pathname === '/api/me') {
-        const user = await getSession(request, db);
-        return json(200, { user: user ? publicUser(user) : null });
-      }
-      if (method !== 'POST') throw failure(404, '页面不存在。');
-      if (request.headers.get('Sec-Fetch-Site') === 'cross-site') throw failure(403, '请在拼单页面内重试。');
-      const body = await readBody(request);
-      if (pathname === '/api/register') return await register(db, body);
-      if (pathname === '/api/login') return await login(db, body);
-      const user = await getSession(request, db);
-      if (pathname === '/api/logout') {
-        if (user) await db.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(user.token_hash).run();
-        return json(200, {}, { 'Set-Cookie': cookie('', 0) });
-      }
-      if (!['/api/orders', '/api/orders/join', '/api/orders/cancel'].includes(pathname)) {
-        throw failure(404, '接口不存在。');
-      }
-      if (!user) throw failure(401, '请先登录。');
-      if (pathname === '/api/orders') {
-        const order = orderFromBody(body, user, crypto.randomUUID());
-        await insertOrder(db, order).run();
-        return json(201, { order: publicOrder(order) });
-      }
-      const order = await changeMembership(db, body.id, user, pathname === '/api/orders/join');
-      return json(200, { order });
-    } catch (error) {
-      if (!error.status) console.error(error);
-      return json(error.status || 500, { error: error.status ? error.message : '服务器暂时无法处理请求。' });
+    const url = new URL(request.url);
+    const origin = request.headers.get('Origin');
+    const crossOrigin = url.pathname.startsWith('/api/') && !!origin && origin !== url.origin;
+    if (!crossOrigin) return handleRequest(request, env, false);
+    if (origin !== env.PAGES_ORIGIN) return json(403, { error: '请在拼单页面内重试。' });
+
+    const headers = {
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+      'Access-Control-Max-Age': '600',
+      'Vary': 'Origin'
+    };
+    if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers });
+    const response = await handleRequest(request, env, true);
+    const outgoing = new Response(response.body, response);
+    for (const [name, value] of Object.entries(headers)) {
+      outgoing.headers.set(name, value);
     }
+    return outgoing;
   }
 };
