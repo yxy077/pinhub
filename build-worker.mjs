@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 
-const files = [
+const files = process.argv.includes('--api-only') ? [] : [
   ['/', 'index.html', 'text/html; charset=utf-8'],
   ['/style.css', 'style.css', 'text/css; charset=utf-8'],
   ['/app.js', 'app.js', 'text/javascript; charset=utf-8'],
