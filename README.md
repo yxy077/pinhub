@@ -27,6 +27,8 @@ npm start
 
 ## 线上部署
 
-GitHub Pages 从 `docs/` 发布访问入口，打开后跳转到运行拼单 API 的 HTTPS 站点。线上账号、会话和拼单通过 D1 持久化。本地 JSON 数据与线上数据库独立。
+GitHub Actions 将 `public/` 发布到 GitHub Pages。页面直接连接 Cloudflare Worker 的 HTTPS API，Worker 用 D1 保存账号、会话和拼单。本地 JSON 数据与线上数据库独立。
 
-执行 `npm run build:worker` 生成 Worker 入口 `dist/server/index.js`。托管时需绑定名为 `DB` 的 D1 数据库，并应用 `drizzle/0000_pinhub.sql`。
+执行 `node build-worker.mjs --api-only` 生成 Worker 入口 `dist/server/index.js`。在 Cloudflare 中给 Worker 绑定名为 `DB` 的 D1 数据库，执行 `drizzle/0000_pinhub.sql`，并设置变量 `PAGES_ORIGIN=https://yxy077.github.io`。
+
+GitHub Pages 的 API 地址由 `.github/workflows/pages.yml` 中的 `PINHUB_API_ORIGIN` 配置。
