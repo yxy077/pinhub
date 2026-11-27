@@ -1,2 +1,113 @@
 <!doctype html>
-<html lang="zh-CN"><meta charset="utf-8"><title>PinHub</title></html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#fff8ef">
+  <title>宿舍拼单局</title>
+  <link rel="stylesheet" href="/style.css">
+  <script defer src="/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="frame topbar-inner">
+      <a class="brand" href="/" aria-label="宿舍拼单局首页"><span class="brand-icon" aria-hidden="true">拼</span>宿舍拼单局</a>
+      <nav class="top-nav" aria-label="拼单视图">
+        <button type="button" class="nav-button active" data-view="all" aria-pressed="true">拼单大厅</button>
+        <button type="button" class="nav-button" data-view="mine" aria-pressed="false">我的拼单</button>
+      </nav>
+      <div class="account">
+        <span id="account-name" hidden></span>
+        <button class="button button-outline" id="login" type="button">登录</button>
+        <button class="button button-outline" id="logout" type="button" hidden>退出</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="frame">
+    <section class="hero" id="welcome" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="hero-label">宿舍拼单 · 演示版</p>
+        <h1 id="hero-title">好吃的，<span>一起拼。</span></h1>
+        <p class="hero-description">和室友凑一单，费用一起摊。</p>
+        <button class="button button-primary hero-action" id="new-order" type="button">＋ 发起拼单</button>
+      </div>
+      <aside class="receipt" aria-label="均摊示例">
+        <p class="receipt-heading">均摊示例</p>
+        <p class="receipt-line">¥68 ÷ 4 人</p>
+        <p class="receipt-total"><strong>¥17</strong><span> / 人</span></p>
+      </aside>
+    </section>
+
+    <section class="board" aria-labelledby="board-title">
+      <div class="board-heading">
+        <div><h2 id="board-title" tabindex="-1">拼单大厅</h2><p id="board-summary">正在加载拼单…</p></div>
+        <div id="live" class="live"><span class="live-dot" aria-hidden="true"></span><span id="live-text">连接中</span></div>
+      </div>
+      <div class="filter-bar">
+        <div class="filters" aria-label="商品分类">
+          <button type="button" class="filter active" data-category="全部" aria-pressed="true">全部</button>
+          <button type="button" class="filter" data-category="奶茶" aria-pressed="false">奶茶</button>
+          <button type="button" class="filter" data-category="水果" aria-pressed="false">水果</button>
+          <button type="button" class="filter" data-category="零食" aria-pressed="false">零食</button>
+          <button type="button" class="filter" data-category="其他" aria-pressed="false">其他</button>
+        </div>
+        <label class="status-filter"><input id="open-only" type="checkbox"> 仅看可报名</label>
+      </div>
+      <div id="orders" class="orders" aria-busy="true"></div>
+      <div id="empty" class="empty" hidden>
+        <h3 id="empty-title"></h3>
+        <p id="empty-copy"></p>
+        <button type="button" id="empty-action" class="button button-outline" hidden></button>
+      </div>
+    </section>
+    <footer class="footer"><strong>宿舍拼单局</strong><span>演示版 · 请勿填写或发布个人隐私信息</span></footer>
+  </main>
+
+  <nav class="mobile-nav" aria-label="手机端拼单导航">
+    <button type="button" class="nav-button active" data-view="all" aria-pressed="true">大厅</button>
+    <button type="button" class="nav-button" data-view="mine" aria-pressed="false">我的拼单</button>
+    <button type="button" class="button button-primary mobile-action" id="mobile-new-order">＋ 发起拼单</button>
+  </nav>
+
+  <div id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" hidden>
+    <div class="modal-panel">
+      <button type="button" class="close" id="close-modal" aria-label="关闭">×</button>
+      <h2 id="modal-title"></h2>
+      <div id="auth-switch" class="auth-switch" hidden>
+        <button id="tab-login" type="button" aria-pressed="true">登录</button>
+        <button id="tab-register" type="button" aria-pressed="false">注册</button>
+      </div>
+      <form id="auth-form" hidden>
+        <div class="privacy">
+          <strong>本系统为演示版，请使用虚构信息。</strong>
+          <p>请勿填写真实姓名、手机号、学号等个人信息，也请勿使用常用密码。</p>
+        </div>
+        <label>账号<input name="username" autocomplete="username" placeholder="例如：roommate_01" minlength="3" maxlength="24" pattern="[A-Za-z0-9_]{3,24}" required></label>
+        <label>密码<input name="password" type="password" autocomplete="current-password" placeholder="至少 6 位" minlength="6" maxlength="72" required></label>
+        <label id="register-fields" hidden>昵称<input name="nickname" autocomplete="off" placeholder="例如：月亮同学" maxlength="16"></label>
+        <button id="auth-submit" class="button button-primary form-submit" type="submit">登录</button>
+      </form>
+      <form id="order-form" hidden>
+        <label>商品名称<input name="title" placeholder="例如：黑糖波波奶茶" maxlength="48" required></label>
+        <div class="form-row">
+          <label>分类<select name="category" required><option value="">请选择</option><option>奶茶</option><option>水果</option><option>零食</option><option>其他</option></select></label>
+          <label>购买平台<select name="platform" required><option value="">请选择</option><option>美团</option><option>饿了么</option><option>拼多多</option><option>淘宝</option><option>其他</option></select></label>
+        </div>
+        <div class="form-row">
+          <label>总价（元）<input name="total" type="number" min="0.01" max="99999.99" step="0.01" placeholder="68.00" required></label>
+          <label>目标人数（含你）<input name="target" type="number" min="2" max="99" step="1" value="4" required></label>
+        </div>
+        <label>截止时间<input name="deadline" type="datetime-local" placeholder="YYYY-MM-DD HH:MM" required></label>
+        <label>宿舍号（选填）<input name="room" autocomplete="off" maxlength="16" placeholder="例如：A 栋 302" aria-describedby="room-hint">
+          <small id="room-hint" class="field-hint">会显示在拼单卡片上，演示时请使用虚构宿舍号。</small>
+        </label>
+        <label>备注（选填）<textarea name="note" rows="2" maxlength="120" placeholder="可以说明口味或分份方式，请勿填写联系方式。"></textarea></label>
+        <button id="order-submit" class="button button-primary form-submit" type="submit">发布拼单</button>
+      </form>
+      <p class="form-error" id="form-error" role="alert"></p>
+    </div>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
